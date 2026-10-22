@@ -110,6 +110,59 @@ if "KOBIS_KEY" not in st.secrets:
         "`KOBIS_KEY = '발급받은_키'` 형태로 등록되어 있는지 확인해 주세요."
     )
     st.stop()
+import datetime
+import pandas as pd
+import requests
+import streamlit as st
+
+
+# ---------------------------------------------------------
+# 1. 페이지 기본 설정 및 타이틀
+# ---------------------------------------------------------
+st.set_page_config(
+    page_title="일별 박스오피스 조회", page_icon="🎬", layout="wide"
+)
+
+st.title("🎬 일별 박스오피스 순위")
+
+
+# ---------------------------------------------------------
+# 2. 한국 시간(UTC+9) 기준 어제 날짜 계산
+# ---------------------------------------------------------
+def get_max_selectable_date_kst():
+    """배포 서버의 시계와 상관없이 한국 시간(UTC+9) 기준 어제 날짜(date 객체)를 반환합니다."""
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    kst_now = utc_now + datetime.timedelta(hours=9)
+    yesterday_kst = kst_now - datetime.timedelta(days=1)
+    return yesterday_kst.date()
+
+
+# 고를 수 있는 가장 늦은 날짜(어제)
+max_date = get_max_selectable_date_kst()
+
+# 달력 widget을 통해 사용자가 원하는 조회 날짜 선택 (기본값: 어제)
+selected_date = st.date_input(
+    "📅 조회할 날짜를 선택하세요 (최대 선택 가능: 어제)",
+    value=max_date,
+    max_value=max_date,
+    help="오늘 날짜는 아직 집계 전이므로 어제 날짜까지만 선택 가능합니다.",
+)
+
+# API 요청에 맞게 YYYYMMDD 포맷으로 변환
+target_dt = selected_date.strftime("%Y%m%d")
+
+
+# ---------------------------------------------------------
+# 3. KOBIS API 데이터 호출 및 예외 처리
+# ---------------------------------------------------------
+if "KOBIS_KEY" not in st.secrets:
+    st.error("🔑 API 인증키가 설정되지 않았습니다.")
+    st.info(
+        "**[확인 사항]**\n"
+        "- Streamlit Cloud의 `Secrets` 설정 또는 로컬 `.streamlit/secrets.toml` 파일에 "
+        "`KOBIS_KEY = '발급받은_키'` 형태로 등록되어 있는지 확인해 주세요."
+    )
+    st.stop()
 
 api_key = st.secrets["KOBIS_KEY"]
 url = "https://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json"
@@ -172,7 +225,7 @@ for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
 
 
-# [기능 1] 전날 대비 순위 증감(rankInten) 화살표 가공 함수
+# 전날 대비 순위 증감(rankInten) 화살표 가공 함수
 def format_rank_inten(val):
     if val > 0:
         return f"🔺 {val}"  # 빨간 위 화살표 (순위 상승)
@@ -182,7 +235,7 @@ def format_rank_inten(val):
         return "-"  # 변동 없음
 
 
-# [기능 2] 누적관객(audiAcc) 100만 이상 시 영화명에 트로피 이모지 🏆 추가 함수
+# 누적관객(audiAcc) 100만 이상 시 영화명에 트로피 이모지 🏆 추가 함수
 def format_movie_name(row):
     movie_name = row["movieNm"]
     if row["audiAcc"] >= 1_000_000:
@@ -239,7 +292,6 @@ st.markdown("---")
 # ---------------------------------------------------------
 st.subheader("📋 전체 박스오피스 순위")
 
-# 화면 출력용 데이터프레임 구성
 display_df = df[
     [
         "rank",
